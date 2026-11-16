@@ -199,6 +199,17 @@
     try {
       var st = await rpc("get_state");
       loading.remove();
+      // El cierre de caja usa la fecha de esta computadora: se avisa si el reloj está mal.
+      try {
+        var serverNow = new Date(await rpc("server_now")).getTime();
+        var diffMin = Math.round((Date.now() - serverNow) / 60000);
+        if (Math.abs(diffMin) > 10) {
+          var horas = Math.abs(diffMin) >= 120 ? Math.round(Math.abs(diffMin) / 60) + " horas" : Math.abs(diffMin) + " minutos";
+          main.appendChild(h("div", { class: "errbox", role: "alert" },
+            h("p", { text: "El reloj de esta computadora está " + (diffMin > 0 ? "adelantado " : "atrasado ") + "unas " + horas + " respecto de la hora real." }),
+            h("p", { text: "Corregí la fecha y la hora del equipo antes de vender: el cierre de caja usa esa fecha." })));
+        }
+      } catch (e) { /* si falla el chequeo, el panel sigue igual */ }
       var host = h("div", { class: "txPanel" });
       main.appendChild(host);
       disposePanel = window.mountPanel(host, {

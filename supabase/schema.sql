@@ -138,3 +138,9 @@ revoke all on function public.is_allowed(), public.is_admin(), public.needs_setu
 grant execute on function public.needs_setup() to anon, authenticated;
 grant execute on function public.is_allowed(), public.is_admin(), public.my_profile(),
   public.get_state(), public.save_state(jsonb, integer), public.list_history(), public.restore_history(bigint) to authenticated;
+
+-- Hora del servidor: el panel avisa si el reloj de la computadora está desfasado.
+create or replace function public.server_now() returns timestamptz
+language sql stable security definer set search_path = public as $$ select now(); $$;
+revoke all on function public.server_now() from public, anon, authenticated;
+grant execute on function public.server_now() to authenticated;
