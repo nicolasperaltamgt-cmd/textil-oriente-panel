@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   try {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const { count } = await admin.from("allowed_users").select("*", { count: "exact", head: true });
+    const { count } = await admin.from("allowed_users").select("*", { count: "exact", head: true }).eq("role", "admin");
     if ((count ?? 0) > 0) return json({ error: "El panel ya está configurado" }, 403);
 
     const { email, password, name, code } = await req.json();

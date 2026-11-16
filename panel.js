@@ -91,13 +91,13 @@ const SEED = [
   ["Timberland", 176], ["Darlon rib", 86],
 ];
 
-window.mountPanel = function mountPanel(root, { initialData, initialVersion, onConflict, saveState }) {
+window.mountPanel = function mountPanel(root, { initialData, initialVersion, onConflict, saveState, readOnly }) {
   root.innerHTML = PANEL_HTML;
   var disposed = false;
   var uid = function () { return Math.random().toString(36).slice(2, 10); };
 
   var state = initialData && initialData.items ? initialData : {
-    items: SEED.map(function (r) { return { id: uid(), name: r[0], unit: "kg", stock: r[1], price: 0, min: 100 }; }),
+    items: readOnly ? [] : SEED.map(function (r) { return { id: uid(), name: r[0], unit: "kg", stock: r[1], price: 0, min: 100 }; }),
     sales: [], moves: [], cash: {}, expenses: [],
   };
   var fin = function (v) { v = +v; return isFinite(v) ? v : 0; };
@@ -138,7 +138,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   var dirty = false, saving = false, conflict = false, saveTimer = null, okMsg = "", retryTimer = null;
   function setStatus(text, cls) { var el = $("#savebar"); if (!el) return; el.textContent = text; el.className = "savebar " + (cls || ""); }
   function save(msg) {
-    if (conflict) return;
+    if (conflict || readOnly) return;
     dirty = true; if (msg) okMsg = msg;
     setStatus("Guardando…", "");
     clearTimeout(saveTimer); saveTimer = setTimeout(flush, msg ? 0 : 350);
@@ -169,7 +169,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   }
   function beforeUnload(ev) { if (dirty || saving) { ev.preventDefault(); ev.returnValue = ""; } }
   window.addEventListener("beforeunload", beforeUnload);
-  if (initialVersion === 0) save();
+  if (initialVersion === 0 && !readOnly) save();
   else setStatus("Todo guardado en el servidor", "ok");
 
   function itemById(id) { return state.items.filter(function (i) { return i.id === id; })[0]; }
@@ -481,6 +481,22 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   $("#day").addEventListener("change", renderCaja);
 
   renderStock(); backupNote();
+
+  if (readOnly) {
+    // Solo lectura: se puede mirar y descargar el Excel, nada más. El servidor también lo impide.
+    root.classList.add("ro");
+    var keep = { q: 1, day: 1, "btn-export": 1 };
+    var lock = function () {
+      root.querySelectorAll("input,select,textarea,button").forEach(function (el) {
+        if (keep[el.id]) return;
+        el.disabled = true;
+        if (el.tagName === "BUTTON") el.hidden = true;
+      });
+    };
+    lock();
+    new MutationObserver(lock).observe(root, { childList: true, subtree: true });
+    setStatus("Modo solo lectura: podés mirar todo y descargar el Excel, pero no cambiar nada.", "");
+  }
 
   return function dispose() {
     disposed = true;

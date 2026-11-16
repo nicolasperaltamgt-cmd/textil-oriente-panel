@@ -171,7 +171,7 @@
     var today = new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
     var links = h("div", { class: "userrow" }, h("span", { class: "uname", text: profile.display_name || "" }));
     links.appendChild(h("a", { class: "btn sm", href: "#/", text: "Panel" }));
-    links.appendChild(h("a", { class: "btn sm", href: "#/recuperar", text: "Recuperar datos" }));
+    if (profile.role !== "viewer") links.appendChild(h("a", { class: "btn sm", href: "#/recuperar", text: "Recuperar datos" }));
     if (profile.role === "admin") links.appendChild(h("a", { class: "btn sm", href: "#/usuarios", text: "Usuarios" }));
     links.appendChild(h("a", { class: "btn sm", href: "guia.html", target: "_blank", rel: "noopener", text: "Cómo se usa" }));
     links.appendChild(h("button", { class: "btn sm", text: "Salir", onclick: async function () { await sb.auth.signOut(); profile = null; showLogin(); } }));
@@ -189,7 +189,7 @@
     var main = shell();
     var hash = location.hash || "#/";
     if (hash === "#/usuarios" && profile.role === "admin") return showUsers(main);
-    if (hash === "#/recuperar") return showHistory(main);
+    if (hash === "#/recuperar" && profile.role !== "viewer") return showHistory(main);
     return showPanel(main);
   }
 
@@ -216,6 +216,7 @@
         initialData: st.data,
         initialVersion: st.version,
         saveState: saveState,
+        readOnly: profile.role === "viewer",
         onConflict: function () { route(); },
       });
     } catch (e) {
@@ -260,13 +261,18 @@
 
     var name = field("u-name", "Nombre", "text", { required: "required", placeholder: "Tomás" });
     var email = field("u-email", "Email", "email", { required: "required", placeholder: "tomas@correo.com", autocomplete: "off" });
-    var pass = field("u-pass", "Contraseña (mínimo 8 caracteres)", "text", { required: "required", minlength: "8", autocomplete: "off" });
+    var pass = field("u-pass", "Contraseña (mínimo 8 caracteres; 6 si es solo lectura)", "text", { required: "required", autocomplete: "off" });
+    var roleSel = h("select", { id: "u-role", class: "input" },
+      h("option", { value: "user", text: "Usuario: puede vender y cargar" }),
+      h("option", { value: "viewer", text: "Solo lectura: puede mirar, no cambiar nada" }),
+      h("option", { value: "admin", text: "Administrador: además crea usuarios" }));
+    var roleWrap = h("label", { class: "field", for: "u-role" }, "Permiso", roleSel);
     var btn = h("button", { class: "btn primary", type: "submit", text: "Crear usuario" });
-    var form = h("form", { class: "card form" }, h("h3", { class: "subtitle", text: "Crear usuario" }), name.wrap, email.wrap, pass.wrap, btn);
+    var form = h("form", { class: "card form" }, h("h3", { class: "subtitle", text: "Crear usuario" }), name.wrap, email.wrap, pass.wrap, roleWrap, btn);
     form.addEventListener("submit", async function (ev) {
       ev.preventDefault(); btn.disabled = true; msg.className = "msg"; msg.textContent = "";
       try {
-        await callFn("manage-users", { action: "create", name: name.input.value, email: email.input.value, password: pass.input.value });
+        await callFn("manage-users", { action: "create", name: name.input.value, email: email.input.value, password: pass.input.value, role: roleSel.value });
         msg.className = "msg okmsg"; msg.textContent = "Usuario creado. Ya puede ingresar con esa contraseña.";
         form.reset(); await refresh();
       } catch (e) { msg.textContent = e.message; }
@@ -281,7 +287,8 @@
           var pw = h("input", { class: "input", type: "text", placeholder: "Nueva contraseña", autocomplete: "off", "aria-label": "Nueva contraseña de " + u.display_name });
           var setBtn = h("button", { class: "btn sm", text: "Cambiar contraseña" });
           setBtn.addEventListener("click", async function () {
-            if (pw.value.length < 8) { msg.className = "msg"; msg.textContent = "La contraseña nueva necesita al menos 8 caracteres."; return; }
+            var minPw = u.role === "viewer" ? 6 : 8;
+            if (pw.value.length < minPw) { msg.className = "msg"; msg.textContent = "La contraseña nueva necesita al menos " + minPw + " caracteres."; return; }
             try { await callFn("manage-users", { action: "set_password", user_id: u.user_id, password: pw.value }); pw.value = ""; msg.className = "msg okmsg"; msg.textContent = "Contraseña cambiada."; }
             catch (e) { msg.className = "msg"; msg.textContent = e.message; }
           });
@@ -293,7 +300,7 @@
             catch (e) { msg.className = "msg"; msg.textContent = e.message; }
           });
           list.appendChild(h("div", { class: "row wrap" },
-            h("div", { class: "when" }, h("b", { text: u.display_name }), h("span", { text: u.email + " · " + (u.role === "admin" ? "administrador" : "usuario") })),
+            h("div", { class: "when" }, h("b", { text: u.display_name }), h("span", { text: u.email + " · " + (u.role === "admin" ? "administrador" : u.role === "viewer" ? "solo lectura" : "usuario") })),
             h("div", { class: "rowtools" }, pw, setBtn, rm)));
         });
       } catch (e) { msg.className = "msg"; msg.textContent = e.message; }

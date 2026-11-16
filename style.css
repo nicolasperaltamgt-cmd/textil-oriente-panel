@@ -110,6 +110,8 @@ body {
   *, *::before, *::after { box-sizing: border-box; }
   *:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
 
+  &.ro .loadcard, &.ro #sale-form, &.ro #backup-note, &.ro #view-stock > p.hint { display: none; }
+  &.ro td input, &.ro td select { opacity: 0.85; }
   .savebar { min-height: 22px; font-size: 14px; color: var(--muted); }
   .savebar.bad { color: var(--red); font-weight: 600; }
   .savebar.ok { color: var(--ok); }
