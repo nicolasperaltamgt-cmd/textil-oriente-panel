@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cómo se usa | Textil Oriente</title>
+  <meta name="theme-color" content="#0b0b0d">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Jost:wght@300;400;500&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .guia { max-width: 760px; margin: 0 auto; display: grid; gap: 18px; padding: 24px 16px 72px; }
+    .guia h1 { margin: 0; font: 400 1.6rem/1.2 var(--font-family-display); letter-spacing: 0.2em; text-transform: uppercase; }
+    .guia .lead { color: var(--muted); font-size: 1.05rem; margin: 0; }
+    .paso { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+    .num { width: 48px; height: 48px; border-radius: 50%; background: var(--yellow); color: #151515; display: grid; place-items: center; font: 600 1.4rem var(--font-family-display); }
+    .paso h2 { margin: 0 0 6px; font: 500 1.15rem var(--font-family-display); letter-spacing: 0.06em; }
+    .paso p, .paso li { margin: 0 0 6px; }
+    .paso ul { margin: 6px 0 0; padding-left: 20px; }
+    .tecla { display: inline-block; padding: 2px 10px; border-radius: 6px; border: 1px solid #4a4a54; background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+    .tecla.am { background: var(--yellow); color: #151515; border-color: var(--yellow); }
+    .aviso { border: 1px dashed var(--yellow); border-radius: 12px; padding: 16px; background: rgba(242, 210, 27, 0.06); }
+    .aviso b { color: var(--yellow); }
+    .verde { color: var(--ok); font-weight: 600; }
+    .rojo { color: var(--red); font-weight: 600; }
+    .acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+    @media print {
+      body { background: #fff !important; color: #111 !important; }
+      .paso, .aviso { background: #fff !important; border-color: #999 !important; }
+      .guia .lead, .tecla { color: #111 !important; }
+      .acciones { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="guia">
+    <h1>Cómo se usa el panel</h1>
+    <p class="lead">Seguí los pasos en orden. Todo lo que hacés se guarda solo, no hace falta apretar "Guardar".</p>
+
+    <section class="paso">
+      <div class="num">1</div>
+      <div>
+        <h2>Entrar</h2>
+        <p>Abrí el link del panel, escribí tu <b>email</b> y tu <b>contraseña</b> y tocá <span class="tecla am">Entrar</span>.</p>
+        <ul>
+          <li>Si dudás de lo que escribiste, tocá <span class="tecla">Ver</span> al lado de la contraseña.</li>
+          <li>Después de entrar una vez, el panel te recuerda: no te pide la contraseña todos los días.</li>
+          <li>Para tenerlo como una aplicación: en el celular abrí el menú del navegador y elegí <b>Agregar a pantalla de inicio</b>. En la computadora buscá el ícono de <b>Instalar</b> en la barra de arriba.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">2</div>
+      <div>
+        <h2>Cargar el stock</h2>
+        <p>Tocá el botón amarillo <span class="tecla am">Pegar lista de stock</span>.</p>
+        <p>Pegá tu lista tal como la anotás, una tela por línea, con el nombre y el número:</p>
+        <ul><li>Morley est 494</li><li>Lino liso 2.510</li></ul>
+        <p>Tocá <span class="tecla am">Cargar</span>. Las telas que ya estaban se actualizan y las nuevas se agregan.</p>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">3</div>
+      <div>
+        <h2>Poner los precios</h2>
+        <p>En la tabla, tocá el número de la columna <b>Precio</b> y escribí el precio por kilo (o por metro). Podés cambiarlo cuando quieras.</p>
+        <p>Si una tela tiene el precio sin cargar, aparece subrayada en <span class="rojo">rojo</span> con la leyenda "Falta precio".</p>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">4</div>
+      <div>
+        <h2>Cuando entra mercadería</h2>
+        <p>En la fila de la tela tocá <span class="tecla">+ Entró</span>, escribí cuánto entró y tocá <span class="tecla am">Sumar al stock</span>.</p>
+        <p>Si el stock de una tela baja del mínimo, el número se pone en <b style="color:var(--yellow)">amarillo</b>: es hora de reponer.</p>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">5</div>
+      <div>
+        <h2>Vender</h2>
+        <p>En el cuadro <b>Caja · Nueva venta</b>:</p>
+        <ul>
+          <li>Elegí la <b>tela</b>.</li>
+          <li>Poné la <b>cantidad</b>. El precio aparece solo y lo podés cambiar.</li>
+          <li>Elegí la <b>forma de pago</b>: efectivo, transferencia, débito o crédito.</li>
+          <li>Tocá <span class="tecla am">Cobrar y descontar stock</span>.</li>
+        </ul>
+        <p>La venta se anota y el stock baja solo. Si te equivocaste, en la lista de ventas tocá <span class="tecla">Anular</span> y el stock vuelve.</p>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">6</div>
+      <div>
+        <h2>Cerrar la caja al final del día</h2>
+        <ul>
+          <li>Al abrir, escribí el <b>fondo inicial</b>: el efectivo con el que empezás.</li>
+          <li>Si sacás plata de la caja (retiro o gasto), anotalo en <b>Retiro o gasto en efectivo</b>.</li>
+          <li>Al cerrar, contá los billetes y escribí el total en <b>Efectivo contado</b>.</li>
+          <li>El panel te dice <b>Caja exacta</b>, <b>Sobran</b> o <b>Faltan</b>.</li>
+          <li>Tocá <span class="tecla am">Cerrar la caja del día</span> y confirmá.</li>
+        </ul>
+        <p>Con la caja cerrada no se puede vender ni anular, para que no se mueva nada. Si hace falta, tocá <span class="tecla">Reabrir caja</span>.</p>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">7</div>
+      <div>
+        <h2>Pasar todo a Excel</h2>
+        <p>Tocá <span class="tecla">Descargar Excel</span>. Se baja un archivo con el stock, las ventas, los movimientos y los cierres de caja.</p>
+        <p>Si querés llevarte todo a la computadora, tocá <span class="tecla">Guardar todo (copia + Excel)</span>.</p>
+      </div>
+    </section>
+
+    <section class="paso">
+      <div class="num">8</div>
+      <div>
+        <h2>Si algo salió mal</h2>
+        <p>Arriba tocá <span class="tecla">Recuperar datos</span>. Ahí están los puntos de restauración, uno cada 15 minutos mientras trabajás. Elegí el que querés y tocá <span class="tecla">Volver a este punto</span>. Antes de volver atrás se guarda lo actual, así que no se pierde nada.</p>
+      </div>
+    </section>
+
+    <div class="aviso">
+      <p><b>Lo más importante:</b> mirá siempre el aviso de arriba de la tabla.</p>
+      <p><span class="verde">Todo guardado en el servidor</span>: está todo bien.</p>
+      <p><span class="rojo">NO SE GUARDÓ</span>: no cierres la pantalla. Revisá que tengas internet; el panel reintenta solo y avisa cuando guarda.</p>
+      <p>Si olvidaste tu contraseña, pedísela al administrador.</p>
+    </div>
+
+    <div class="acciones">
+      <a class="btn primary" href="./">Ir al panel</a>
+      <button class="btn" type="button" onclick="window.print()">Imprimir esta guía</button>
+    </div>
+  </main>
+</body>
+</html>
