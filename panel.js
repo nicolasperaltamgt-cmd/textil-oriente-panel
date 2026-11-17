@@ -7,7 +7,7 @@ const PANEL_HTML = `
     <div class="loadcard">
       <div class="loadtext">
         <b>¿Tenés el stock anotado?</b>
-        <span>Pegá la lista de stock tal como la anotás, por ejemplo "Morley est 494", y se carga sola.</span>
+        <span>Pegá la lista tal como la anotás, con el nombre y la cantidad de rollos, por ejemplo "Morley est 494". Los kilos totales los cargás después en la tabla.</span>
       </div>
       <button id="btn-paste" class="primary big">Pegar lista de stock</button>
     </div>
@@ -22,10 +22,10 @@ const PANEL_HTML = `
       <input id="file-restore" type="file" accept=".json" hidden>
     </div>
     <p class="hint" id="backup-note"></p>
-    <p class="hint">Tocá cualquier número para cambiarlo, el precio también. Todo se guarda solo en el servidor. El stock en amarillo es el que hay que reponer.</p>
+    <p class="hint">Tocá cualquier número para cambiarlo. Los <b>kilos totales</b> son la suma de todos los rollos de esa tela. El precio de lista es solo de referencia: en cada venta ponés el precio de ese cliente. Todo se guarda solo en el servidor.</p>
     <div class="tablebox">
       <table>
-        <thead><tr><th>Tela</th><th>Unidad</th><th class="num">Stock</th><th class="num">Precio</th><th class="num">Mínimo</th><th class="num">Valor</th><th></th></tr></thead>
+        <thead><tr><th>Tela</th><th class="num">Rollos</th><th class="num">Kilos totales</th><th class="num">Precio de lista (opcional)</th><th class="num">Mínimo (kg)</th><th class="num">Valor</th><th></th></tr></thead>
         <tbody id="tb-stock"></tbody>
       </table>
     </div>
@@ -36,9 +36,12 @@ const PANEL_HTML = `
       <h2 class="title">Caja · Nueva venta</h2>
       <label for="s-item">Tela<select id="s-item"></select></label>
       <div class="row2">
-        <label for="s-qty">Cantidad<input id="s-qty" type="number" min="0" step="any" inputmode="decimal" value="1"></label>
-        <label for="s-price">Precio unitario<input id="s-price" type="number" min="0" step="any" inputmode="decimal"></label>
+        <label for="s-rolls">Rollos (opcional)<input id="s-rolls" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></label>
+        <label for="s-qty">Kilos<input id="s-qty" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        
       </div>
+      <label for="s-price">Precio de esta venta (por kilo)<input id="s-price" type="number" min="0" step="any" inputmode="decimal" placeholder="Escribilo para cada cliente"></label>
+      <p class="hint" id="s-ref"></p>
       <div class="row2">
         <label for="s-method">Forma de pago
           <select id="s-method"><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option></select>
@@ -64,8 +67,8 @@ const PANEL_HTML = `
 <dialog id="dlg-paste">
   <form method="dialog" id="f-paste">
     <h2>Pegar lista de stock</h2>
-    <p class="hint">Una tela por línea, con el nombre y el número. Sirve tal como lo anotás: "Stock morley est 494" o "Lino liso 2.510". Las telas que ya existen se actualizan y las nuevas se agregan.</p>
-    <textarea id="paste-text" placeholder="Morley est 494&#10;Wafle 615&#10;Lino liso 2.510"></textarea>
+    <p class="hint">Una tela por línea: el nombre, la cantidad de <b>rollos</b> y, si querés, los <b>kilos totales</b>. Por ejemplo "Morley est 494" o "Wafle 615 1250". Las telas que ya existen se actualizan y las nuevas se agregan.</p>
+    <textarea id="paste-text" placeholder="Morley est 494&#10;Wafle 615 1250&#10;Lino liso 2.510"></textarea>
     <div class="dlgbtns"><button type="button" class="ghost" id="paste-cancel">Cancelar</button><button type="submit" class="primary">Cargar</button></div>
   </form>
 </dialog>
@@ -73,7 +76,8 @@ const PANEL_HTML = `
 <dialog id="dlg-in">
   <form method="dialog" id="f-in">
     <h2 id="in-title">Entró mercadería</h2>
-    <label for="in-qty">Cantidad que entra<input id="in-qty" type="number" min="0" step="any" inputmode="decimal"></label>
+    <label for="in-rolls">Rollos que entran<input id="in-rolls" type="number" min="0" step="1" inputmode="numeric"></label>
+    <label for="in-qty">Kilos que entran<input id="in-qty" type="number" min="0" step="any" inputmode="decimal"></label>
     <label for="in-note">Nota<input id="in-note" type="text" placeholder="Proveedor, remito (opcional)"></label>
     <div class="dlgbtns"><button type="button" class="ghost" id="in-cancel">Cancelar</button><button type="submit" class="primary">Sumar al stock</button></div>
   </form>
@@ -97,12 +101,12 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   var uid = function () { return Math.random().toString(36).slice(2, 10); };
 
   var state = initialData && initialData.items ? initialData : {
-    items: readOnly ? [] : SEED.map(function (r) { return { id: uid(), name: r[0], unit: "kg", stock: r[1], price: 0, min: 100 }; }),
+    items: readOnly ? [] : SEED.map(function (r) { return { id: uid(), name: r[0], unit: "kg", rolls: r[1], stock: 0, price: 0, min: 0 }; }),
     sales: [], moves: [], cash: {}, expenses: [],
   };
   var fin = function (v) { v = +v; return isFinite(v) ? v : 0; };
   state.items = (Array.isArray(state.items) ? state.items : []).filter(function (i) { return i && typeof i === "object" && typeof i.name === "string"; }).map(function (i) {
-    return { id: String(i.id || uid()), name: i.name, unit: ["kg", "m", "u"].indexOf(i.unit) >= 0 ? i.unit : "kg", stock: fin(i.stock), price: fin(i.price), min: fin(i.min) };
+    return { id: String(i.id || uid()), name: i.name, unit: "kg", rolls: fin(i.rolls), stock: fin(i.stock), price: fin(i.price), min: fin(i.min) };
   });
   state.sales = (Array.isArray(state.sales) ? state.sales : []).filter(function (s) { return s && typeof s === "object"; });
   state.moves = Array.isArray(state.moves) ? state.moves : [];
@@ -173,28 +177,29 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   else setStatus("Todo guardado en el servidor", "ok");
 
   function itemById(id) { return state.items.filter(function (i) { return i.id === id; })[0]; }
-  function logMove(item, type, qty, note) { state.moves.push({ id: uid(), ts: Date.now(), itemId: item.id, name: item.name, type: type, qty: qty, stockAfter: item.stock, note: note || "" }); }
+  function logMove(item, type, qty, note, rolls) { state.moves.push({ id: uid(), ts: Date.now(), itemId: item.id, name: item.name, type: type, qty: qty, rolls: rolls || 0, stockAfter: item.stock, rollsAfter: item.rolls || 0, note: note || "" }); }
 
   /* ---------- stock ---------- */
   function isLow(i) { return i.min > 0 && i.stock < i.min; }
   function renderStats() {
-    var total = 0, value = 0, low = 0, noPrice = 0;
-    state.items.forEach(function (i) { total += i.stock; value += i.stock * i.price; if (isLow(i)) low++; if (!i.price) noPrice++; });
+    var total = 0, value = 0, low = 0, rollsTotal = 0;
+    state.items.forEach(function (i) { total += i.stock; rollsTotal += i.rolls || 0; value += i.stock * i.price; if (isLow(i)) low++; });
     var box = $("#stats-stock"); box.textContent = "";
-    [["Telas", String(state.items.length), ""], ["Stock total", fmt(total), ""], ["Valor en stock", money(value), ""],
-     ["Para reponer", String(low), low ? "warn" : ""], ["Sin precio", String(noPrice), noPrice ? "warn" : ""]].forEach(function (s) {
+    [["Telas", String(state.items.length), ""], ["Rollos", fmt(rollsTotal), ""], ["Kilos totales", fmt(total), ""], ["Valor a precio de lista", money(value), ""],
+     ["Para reponer", String(low), low ? "warn" : ""]].forEach(function (s) {
       box.appendChild(h("div", { class: "stat " + s[2] }, h("small", { text: s[0] }), h("b", { text: s[1] })));
     });
   }
   function paintRow(tr, i) {
-    tr.classList.toggle("low", isLow(i)); tr.classList.toggle("noprice", !i.price);
-    var v = tr.querySelector(".val"); v.textContent = i.price ? money(i.stock * i.price) : "Falta precio"; v.classList.toggle("missing", !i.price);
+    tr.classList.toggle("low", isLow(i));
+    var v = tr.querySelector(".val"); v.textContent = i.price && i.stock ? money(i.stock * i.price) : "–";
   }
   function numInput(item, field) {
     var inp = h("input", { class: "n", type: "number", step: "any", min: "0", inputmode: "decimal", value: String(item[field]), "aria-label": field + " de " + item.name });
     inp.addEventListener("change", function () {
-      var v = Math.max(0, num(inp.value)); var old = item[field]; item[field] = v; inp.value = String(v);
-      if (field === "stock" && v !== old) logMove(item, "ajuste", v - old, "Edición manual");
+      var v = Math.max(0, num(inp.value)); if (field === "rolls") v = Math.round(v); var old = item[field]; item[field] = v; inp.value = String(v);
+      if (field === "stock" && v !== old) logMove(item, "ajuste", v - old, "Edición manual", 0);
+      if (field === "rolls" && v !== old) logMove(item, "ajuste", 0, "Edición manual", v - old);
       save(); paintRow(inp.closest("tr"), item); renderStats(); fillSelect();
     });
     return inp;
@@ -206,10 +211,8 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     list.forEach(function (i) {
       var name = h("input", { type: "text", value: i.name, "aria-label": "Nombre de la tela" });
       name.addEventListener("change", function () { i.name = name.value.trim() || i.name; name.value = i.name; save(); fillSelect(); });
-      var unit = h("select", { "aria-label": "Unidad de " + i.name }, h("option", { text: "kg" }), h("option", { text: "m" }), h("option", { text: "u" }));
-      unit.value = i.unit; unit.addEventListener("change", function () { i.unit = unit.value; save(); fillSelect(); });
       var tr = h("tr", null,
-        h("td", null, name), h("td", null, unit),
+        h("td", null, name), h("td", { class: "num rollscell" }, numInput(i, "rolls")),
         h("td", { class: "num stockcell" }, numInput(i, "stock")),
         h("td", { class: "num pricecell" }, numInput(i, "price")),
         h("td", { class: "num" }, numInput(i, "min")),
@@ -228,19 +231,22 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   }
   $("#q").addEventListener("input", renderStock);
   $("#btn-add").addEventListener("click", function () {
-    var it = { id: uid(), name: "Nueva tela", unit: "kg", stock: 0, price: 0, min: 100 };
+    var it = { id: uid(), name: "Nueva tela", unit: "kg", rolls: 0, stock: 0, price: 0, min: 0 };
     state.items.unshift(it); $("#q").value = ""; save(); renderStock();
     var first = $("#tb-stock input"); if (first) { first.focus(); first.select(); }
   });
 
   /* ingreso */
   var ingresoItem = null;
-  function openIngreso(i) { ingresoItem = i; $("#in-title").textContent = "Entró: " + i.name; $("#in-qty").value = ""; $("#in-note").value = ""; $("#dlg-in").showModal(); $("#in-qty").focus(); }
+  function openIngreso(i) { ingresoItem = i; $("#in-title").textContent = "Entró: " + i.name; $("#in-qty").value = ""; $("#in-rolls").value = ""; $("#in-note").value = ""; $("#dlg-in").showModal(); $("#in-qty").focus(); }
   $("#in-cancel").addEventListener("click", function () { $("#dlg-in").close(); });
   $("#f-in").addEventListener("submit", function () {
-    var q = num($("#in-qty").value); if (!ingresoItem || q <= 0) return;
-    ingresoItem.stock = Math.round((ingresoItem.stock + q) * 1000) / 1000; logMove(ingresoItem, "ingreso", q, $("#in-note").value);
-    save("Sumaste " + fmt(q) + " " + ingresoItem.unit + " a " + ingresoItem.name); renderStock();
+    var q = num($("#in-qty").value), rl = Math.round(num($("#in-rolls").value));
+    if (!ingresoItem || (q <= 0 && rl <= 0)) return;
+    ingresoItem.stock = Math.round((ingresoItem.stock + Math.max(q, 0)) * 1000) / 1000;
+    ingresoItem.rolls = (ingresoItem.rolls || 0) + Math.max(rl, 0);
+    logMove(ingresoItem, "ingreso", Math.max(q, 0), $("#in-note").value, Math.max(rl, 0));
+    save("Sumaste " + (rl > 0 ? rl + " rollos " : "") + (q > 0 ? fmt(q) + " kg " : "") + "a " + ingresoItem.name); renderStock();
   });
 
   /* pegar lista */
@@ -250,11 +256,17 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     rows.forEach(function (r) {
       var found = state.items.filter(function (i) { return norm(i.name) === norm(r.name); })[0];
       if (found) {
-        var old = found.stock; found.stock = r.stock; if (r.price != null) found.price = r.price; if (r.min != null) found.min = r.min; if (r.unit) found.unit = r.unit;
-        if (r.stock !== old) logMove(found, "ajuste", r.stock - old, "Carga de lista"); upd++;
+        var oldKg = found.stock, oldRolls = found.rolls || 0;
+        if (r.rolls != null) found.rolls = r.rolls;
+        if (r.kg != null) found.stock = r.kg;
+        if (r.price != null) found.price = r.price;
+        if (r.min != null) found.min = r.min;
+        var dk = found.stock - oldKg, dr = (found.rolls || 0) - oldRolls;
+        if (dk !== 0 || dr !== 0) logMove(found, "ajuste", dk, "Carga de lista", dr);
+        upd++;
       } else {
-        var it = { id: uid(), name: r.name, unit: r.unit || "kg", stock: r.stock, price: r.price || 0, min: r.min != null ? r.min : 100 };
-        state.items.push(it); logMove(it, "alta", r.stock, "Carga de lista"); add++;
+        var it = { id: uid(), name: r.name, unit: "kg", rolls: r.rolls || 0, stock: r.kg || 0, price: r.price || 0, min: r.min != null ? r.min : 0 };
+        state.items.push(it); logMove(it, "alta", it.stock, "Carga de lista", it.rolls); add++;
       }
     });
     save(upd + " actualizadas, " + add + " nuevas"); renderStock();
@@ -264,8 +276,11 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   $("#f-paste").addEventListener("submit", function () {
     var rows = [];
     $("#paste-text").value.split(/\r?\n/).forEach(function (line) {
-      var m = line.trim().match(/^(?:stock\s+)?(.+?)[\s:=-]+([\d.,]+)\s*$/i);
-      if (m && /[a-zA-ZÀ-ÿ]/.test(m[1]) && isFinite(parseNumber(m[2]))) rows.push({ name: m[1].trim().replace(/^./, function (c) { return c.toUpperCase(); }), stock: parseNumber(m[2]) });
+      var m = line.trim().match(/^(?:stock\s+)?(.+?)[\s:=-]+([\d.,]+)(?:\s+([\d.,]+))?\s*$/i);
+      if (!m || !/[a-zA-ZÀ-ÿ]/.test(m[1])) return;
+      var rl = parseNumber(m[2]), kg = m[3] != null ? parseNumber(m[3]) : null;
+      if (!isFinite(rl) || (kg != null && !isFinite(kg))) return;
+      rows.push({ name: m[1].trim().replace(/^./, function (c) { return c.toUpperCase(); }), rolls: Math.round(rl), kg: kg });
     });
     if (rows.length) applyList(rows); else toast("No encontré líneas con nombre y número");
     $("#paste-text").value = "";
@@ -283,13 +298,17 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
         var data = XLSX.utils.sheet_to_json(ws, { defval: "" }), rows = [];
         data.forEach(function (r) {
           var low = {}; Object.keys(r).forEach(function (k) { low[norm(k)] = r[k]; });
-          var name = low["tela"] || low["nombre"] || low["producto"]; var stock = low["stock"] != null ? low["stock"] : low["cantidad"];
-          if (!name || stock === "" || !isFinite(parseNumber(stock))) return;
-          var price = low["precio"] != null ? low["precio"] : low["precio por unidad"];
-          var min = low["minimo"];
-          rows.push({ name: String(name).trim(), stock: parseNumber(stock), unit: low["unidad"] || "", price: price === "" || price == null ? null : parseNumber(price), min: min === "" || min == null ? null : parseNumber(min) });
+          var name = low["tela"] || low["nombre"] || low["producto"];
+          var rl = low["rollos"] != null ? low["rollos"] : low["piezas"];
+          var kg = low["kilos totales"] != null ? low["kilos totales"] : (low["kilos"] != null ? low["kilos"] : (low["stock"] != null ? low["stock"] : low["cantidad"]));
+          if (!name) return;
+          var hasRl = rl != null && rl !== "" && isFinite(parseNumber(rl)), hasKg = kg != null && kg !== "" && isFinite(parseNumber(kg));
+          if (!hasRl && !hasKg) return;
+          var price = low["precio de lista"] != null ? low["precio de lista"] : (low["precio"] != null ? low["precio"] : low["precio por unidad"]);
+          var min = low["minimo (kg)"] != null ? low["minimo (kg)"] : low["minimo"];
+          rows.push({ name: String(name).trim(), rolls: hasRl ? Math.round(parseNumber(rl)) : null, kg: hasKg ? parseNumber(kg) : null, price: price === "" || price == null ? null : parseNumber(price), min: min === "" || min == null ? null : parseNumber(min) });
         });
-        if (rows.length) applyList(rows); else toast("No encontré columnas Tela y Stock en el archivo");
+        if (rows.length) applyList(rows); else toast("No encontré columnas Tela, Rollos o Kilos en el archivo");
       } catch (e) { toast("No pude leer ese archivo"); }
       inp.value = "";
     };
@@ -303,9 +322,9 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   }
   function exportXlsx() {
     var wb = XLSX.utils.book_new();
-    var stock = state.items.map(function (i) { return { "Tela": i.name, "Unidad": i.unit, "Stock": i.stock, "Precio": i.price, "Mínimo": i.min, "Valor en stock": r2(i.stock * i.price) }; });
-    var sales = state.sales.map(function (s) { return { "Fecha": new Date(s.ts).toLocaleDateString("es-AR"), "Hora": hhmm(s.ts), "Tela": s.name, "Cantidad": s.qty, "Unidad": s.unit, "Precio": s.price, "Total": s.total, "Pago": s.method, "Nota": s.note, "Estado": s.voided ? "ANULADA" : "Válida" }; });
-    var moves = state.moves.map(function (m) { return { "Fecha": new Date(m.ts).toLocaleDateString("es-AR"), "Hora": hhmm(m.ts), "Tela": m.name, "Tipo": m.type, "Cantidad": m.qty, "Stock resultante": m.stockAfter, "Nota": m.note }; });
+    var stock = state.items.map(function (i) { return { "Tela": i.name, "Rollos": i.rolls || 0, "Kilos totales": i.stock, "Precio de lista": i.price, "Mínimo (kg)": i.min, "Valor a precio de lista": r2(i.stock * i.price) }; });
+    var sales = state.sales.map(function (s) { return { "Fecha": new Date(s.ts).toLocaleDateString("es-AR"), "Hora": hhmm(s.ts), "Tela": s.name, "Rollos": s.rolls || 0, "Kilos": s.qty, "Precio por kilo": s.price, "Total": s.total, "Pago": s.method, "Nota": s.note, "Estado": s.voided ? "ANULADA" : "Válida" }; });
+    var moves = state.moves.map(function (m) { return { "Fecha": new Date(m.ts).toLocaleDateString("es-AR"), "Hora": hhmm(m.ts), "Tela": m.name, "Tipo": m.type, "Rollos": m.rolls || 0, "Kilos": m.qty, "Rollos resultantes": m.rollsAfter != null ? m.rollsAfter : "", "Kilos resultantes": m.stockAfter, "Nota": m.note }; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stock), "Stock");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales.length ? sales : [{ "Fecha": "" }]), "Ventas");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(moves.length ? moves : [{ "Fecha": "" }]), "Movimientos");
@@ -427,30 +446,38 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   /* ---------- caja ---------- */
   function fillSelect() {
     var sel = $("#s-item"), prev = sel.value; sel.textContent = "";
-    state.items.forEach(function (i) { sel.appendChild(h("option", { value: i.id, text: i.name + " · quedan " + fmt(i.stock) + " " + i.unit })); });
-    if (prev && itemById(prev)) { sel.value = prev; calc(); } else syncPrice();
+    state.items.forEach(function (i) { sel.appendChild(h("option", { value: i.id, text: i.name + " · " + fmt(i.rolls || 0) + " rollos · " + fmt(i.stock) + " kg" })); });
+    if (prev && itemById(prev)) sel.value = prev;
+    syncPrice();
   }
-  function syncPrice() { var i = itemById($("#s-item").value); $("#s-price").value = i ? String(i.price || "") : ""; calc(); }
+  // El precio es manual en cada venta (cambia según el cliente): solo se muestra el de lista como referencia.
+  function syncPrice() {
+    var i = itemById($("#s-item").value), ref = $("#s-ref");
+    ref.textContent = i && i.price ? "Precio de lista de referencia: " + money(i.price) + " por kilo" : "";
+    calc();
+  }
   function calc() { $("#s-total").textContent = money(r2(num($("#s-qty").value) * num($("#s-price").value))); }
   $("#s-item").addEventListener("change", syncPrice);
   $("#s-qty").addEventListener("input", calc); $("#s-price").addEventListener("input", calc);
   $("#sale-form").addEventListener("submit", function (ev) {
     ev.preventDefault();
     if ($("#s-submit").disabled) return;
-    var i = itemById($("#s-item").value), qty = num($("#s-qty").value), price = num($("#s-price").value), msg = $("#s-msg");
+    var i = itemById($("#s-item").value), qty = num($("#s-qty").value), rolls = Math.round(num($("#s-rolls").value)), price = num($("#s-price").value), msg = $("#s-msg");
     msg.textContent = "";
-    if (conflict) { msg.textContent = "Se está recargando la pantalla. Esperá un momento."; return; }
+    if (conflict) { msg.textContent = "Se está actualizando la pantalla. Esperá un momento."; return; }
     if (cashOf(dayKey(Date.now())).closed) { msg.textContent = "La caja de hoy está cerrada. Reabrila abajo para seguir vendiendo."; return; }
     if (!i) { msg.textContent = "Elegí una tela."; return; }
-    if (qty <= 0) { msg.textContent = "Poné una cantidad mayor a cero."; return; }
-    if (price <= 0) { msg.textContent = "Falta el precio. Escribilo acá o en la tabla de stock."; return; }
+    if (qty <= 0) { msg.textContent = "Poné los kilos de la venta."; return; }
+    if (price <= 0) { msg.textContent = "Poné el precio de esta venta (por kilo)."; return; }
     if (price > 10000000 || qty * price > 1000000000) { msg.textContent = "El precio o el total parece demasiado alto. Revisá los ceros."; return; }
-    if (qty > i.stock) { msg.textContent = "No alcanza el stock: quedan " + fmt(i.stock) + " " + i.unit + "."; return; }
+    if (qty > i.stock) { msg.textContent = "No alcanza el stock: quedan " + fmt(i.stock) + " kg. Si todavía no cargaste los kilos de esta tela, cargalos en la tabla."; return; }
+    if (rolls < 0) { msg.textContent = "Los rollos no pueden ser negativos."; return; }
+    if (rolls > (i.rolls || 0)) { msg.textContent = "No hay tantos rollos: quedan " + fmt(i.rolls || 0) + "."; return; }
     var sb = $("#s-submit"); sb.disabled = true; setTimeout(function () { sb.disabled = false; }, 1200);
-    i.stock = Math.round((i.stock - qty) * 1000) / 1000; if (!i.price) i.price = price;
-    var s = { id: uid(), ts: Date.now(), itemId: i.id, name: i.name, unit: i.unit, qty: qty, price: price, total: r2(qty * price), method: $("#s-method").value, note: $("#s-note").value.trim() };
-    state.sales.push(s); logMove(i, "venta", -qty, s.note);
-    $("#day").value = dayKey(Date.now()); $("#s-qty").value = "1"; $("#s-note").value = ""; renderStock();
+    i.stock = Math.round((i.stock - qty) * 1000) / 1000; i.rolls = (i.rolls || 0) - rolls;
+    var s = { id: uid(), ts: Date.now(), itemId: i.id, name: i.name, unit: "kg", rolls: rolls, qty: qty, price: price, total: r2(qty * price), method: $("#s-method").value, note: $("#s-note").value.trim() };
+    state.sales.push(s); logMove(i, "venta", -qty, s.note, -rolls);
+    $("#day").value = dayKey(Date.now()); $("#s-qty").value = ""; $("#s-rolls").value = ""; $("#s-price").value = ""; $("#s-note").value = ""; renderStock();
     save("Venta guardada: " + money(s.total));
   });
   function renderCaja() {
@@ -466,7 +493,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     if (!list.length) tb.appendChild(h("tr", null, h("td", { colspan: "3", class: "empty", text: "No hay ventas en este día." })));
     list.forEach(function (s) {
       tb.appendChild(h("tr", null,
-        h("td", null, h("div", { class: "t", text: s.name }), h("div", { class: "hint", text: hhmm(s.ts) + " · " + fmt(s.qty) + " " + s.unit + " × " + money(s.price) + " · " + s.method + (s.note ? " · " + s.note : "") })),
+        h("td", null, h("div", { class: "t", text: s.name }), h("div", { class: "hint", text: hhmm(s.ts) + " · " + (s.rolls ? s.rolls + (s.rolls === 1 ? " rollo · " : " rollos · ") : "") + fmt(s.qty) + " kg × " + money(s.price) + " · " + s.method + (s.note ? " · " + s.note : "") })),
         h("td", { class: "num t", text: money(s.total), style: s.voided ? "text-decoration:line-through;color:var(--muted)" : "" }),
         h("td", { class: "actions" }, s.voided ? h("span", { class: "pill", text: "Anulada " + hhmm(s.voided) }) : h("button", { class: "sm ghost danger", text: "Anular", onclick: function (ev) { voidSale(s, ev.currentTarget); } }))));
     });
@@ -475,7 +502,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   function voidSale(s, btn) {
     if (cashOf(dayKey(s.ts)).closed) { toast("La caja de ese día está cerrada. Reabrila para anular."); return; }
     if (armedSale !== btn) { armedSale = btn; btn.textContent = "¿Seguro?"; setTimeout(function () { if (armedSale === btn) { btn.textContent = "Anular"; armedSale = null; } }, 3000); return; }
-    var i = itemById(s.itemId); if (i) { i.stock = Math.round((i.stock + s.qty) * 1000) / 1000; logMove(i, "anulación", s.qty, "Venta anulada"); }
+    var i = itemById(s.itemId); if (i) { i.stock = Math.round((i.stock + s.qty) * 1000) / 1000; i.rolls = (i.rolls || 0) + (s.rolls || 0); logMove(i, "anulación", s.qty, "Venta anulada", s.rolls || 0); }
     s.voided = Date.now(); armedSale = null; renderStock(); save("Venta anulada, el stock volvió");
   }
   $("#day").addEventListener("change", renderCaja);
