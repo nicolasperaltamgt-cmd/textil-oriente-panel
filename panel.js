@@ -43,10 +43,18 @@ const PANEL_HTML = `
       <label for="s-price">Precio de esta venta (por kilo)<input id="s-price" type="number" min="0" step="any" inputmode="decimal" placeholder="Escribilo para cada cliente"></label>
       <p class="hint" id="s-ref"></p>
       <div class="row2">
-        <label for="s-method">Forma de pago
+        <label id="s-method-wrap" for="s-method">Forma de pago
           <select id="s-method"><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option></select>
         </label>
         <label for="s-note">Cliente o nota<input id="s-note" type="text" placeholder="Opcional"></label>
+      </div>
+      <button type="button" class="linkbtn" id="s-split">Dividir el pago (por ej. efectivo + transferencia)</button>
+      <div id="s-split-box" class="splitbox" hidden>
+        <label for="sp-ef">Efectivo<input id="sp-ef" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        <label for="sp-tr">Transferencia<input id="sp-tr" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        <label for="sp-de">Débito<input id="sp-de" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        <label for="sp-cr">Crédito<input id="sp-cr" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        <div class="splitresto" id="sp-resto"></div>
       </div>
       <div class="total"><span class="hint">Total</span><b id="s-total">$ 0</b></div>
       <p class="msg" id="s-msg" role="alert"></p>
@@ -323,7 +331,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   function exportXlsx() {
     var wb = XLSX.utils.book_new();
     var stock = state.items.map(function (i) { return { "Tela": i.name, "Rollos": i.rolls || 0, "Kilos totales": i.stock, "Precio de lista": i.price, "Mínimo (kg)": i.min, "Valor a precio de lista": r2(i.stock * i.price) }; });
-    var sales = state.sales.map(function (s) { return { "Fecha": new Date(s.ts).toLocaleDateString("es-AR"), "Hora": hhmm(s.ts), "Tela": s.name, "Rollos": s.rolls || 0, "Kilos": s.qty, "Precio por kilo": s.price, "Total": s.total, "Pago": s.method, "Nota": s.note, "Estado": s.voided ? "ANULADA" : "Válida" }; });
+    var sales = state.sales.map(function (s) { return { "Fecha": new Date(s.ts).toLocaleDateString("es-AR"), "Hora": hhmm(s.ts), "Tela": s.name, "Rollos": s.rolls || 0, "Kilos": s.qty, "Precio por kilo": s.price, "Total": s.total, "Pago": payLabel(s), "Efectivo": payAmt(s, "Efectivo"), "Transferencia": payAmt(s, "Transferencia"), "Débito": payAmt(s, "Débito"), "Crédito": payAmt(s, "Crédito"), "Nota": s.note, "Estado": s.voided ? "ANULADA" : "Válida" }; });
     var moves = state.moves.map(function (m) { return { "Fecha": new Date(m.ts).toLocaleDateString("es-AR"), "Hora": hhmm(m.ts), "Tela": m.name, "Tipo": m.type, "Rollos": m.rolls || 0, "Kilos": m.qty, "Rollos resultantes": m.rollsAfter != null ? m.rollsAfter : "", "Kilos resultantes": m.stockAfter, "Nota": m.note }; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stock), "Stock");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales.length ? sales : [{ "Fecha": "" }]), "Ventas");
@@ -456,7 +464,36 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     ref.textContent = i && i.price ? "Precio de lista de referencia: " + money(i.price) + " por kilo" : "";
     calc();
   }
-  function calc() { $("#s-total").textContent = money(r2(num($("#s-qty").value) * num($("#s-price").value))); }
+  function calc() { $("#s-total").textContent = money(r2(num($("#s-qty").value) * num($("#s-price").value))); updateSplitHint(); }
+  /* ---------- pago dividido ---------- */
+  var SPLIT = { "Efectivo": "sp-ef", "Transferencia": "sp-tr", "Débito": "sp-de", "Crédito": "sp-cr" };
+  var splitMode = false;
+  function curTotal() { return r2(num($("#s-qty").value) * num($("#s-price").value)); }
+  function payAmounts(sl) { return Array.isArray(sl.payments) && sl.payments.length ? sl.payments : [{ method: sl.method, amount: sl.total }]; }
+  function payLabel(sl) { var p = payAmounts(sl); return p.length > 1 ? p.map(function (x) { return x.method + " " + money(x.amount); }).join(" + ") : p[0].method; }
+  function payAmt(sl, m) { var t = 0; payAmounts(sl).forEach(function (x) { if (x.method === m) t = r2(t + x.amount); }); return t; }
+  function setSplit(on) {
+    splitMode = on;
+    $("#s-split-box").hidden = !on; $("#s-method-wrap").hidden = on;
+    $("#s-split").textContent = on ? "Pagar con una sola forma" : "Dividir el pago (por ej. efectivo + transferencia)";
+    updateSplitHint();
+  }
+  function resetSplit() { Object.keys(SPLIT).forEach(function (m) { $("#" + SPLIT[m]).value = ""; }); setSplit(false); }
+  function updateSplitHint() {
+    if (!splitMode) return;
+    var sum = 0; Object.keys(SPLIT).forEach(function (m) { sum = r2(sum + r2(Math.max(0, num($("#" + SPLIT[m]).value)))); });
+    var total = curTotal(), d = r2(total - sum), el = $("#sp-resto"); el.textContent = "";
+    if (total <= 0) { el.textContent = "Primero poné los kilos y el precio de la venta."; el.className = "splitresto"; return; }
+    if (d === 0) { el.textContent = "Pago completo: " + money(total); el.className = "splitresto okline"; return; }
+    el.className = "splitresto";
+    el.appendChild(document.createTextNode(d > 0 ? "Falta cobrar " + money(d) + ". " : "Te pasaste por " + money(-d) + ". "));
+    if (d > 0) Object.keys(SPLIT).forEach(function (m) {
+      el.appendChild(h("button", { type: "button", class: "sm linkbtn", text: "Poner el resto en " + m.toLowerCase(), onclick: function () { var inp = $("#" + SPLIT[m]); inp.value = String(r2(num(inp.value) + d)); updateSplitHint(); } }));
+    });
+  }
+  $("#s-split").addEventListener("click", function () { setSplit(!splitMode); });
+  Object.keys(SPLIT).forEach(function (m) { $("#" + SPLIT[m]).addEventListener("input", updateSplitHint); });
+
   $("#s-item").addEventListener("change", syncPrice);
   $("#s-qty").addEventListener("input", calc); $("#s-price").addEventListener("input", calc);
   $("#sale-form").addEventListener("submit", function (ev) {
@@ -473,18 +510,25 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     if (qty > i.stock) { msg.textContent = "No alcanza el stock: quedan " + fmt(i.stock) + " kg. Si todavía no cargaste los kilos de esta tela, cargalos en la tabla."; return; }
     if (rolls < 0) { msg.textContent = "Los rollos no pueden ser negativos."; return; }
     if (rolls > (i.rolls || 0)) { msg.textContent = "No hay tantos rollos: quedan " + fmt(i.rolls || 0) + "."; return; }
+    var total = r2(qty * price), payments = [];
+    if (splitMode) {
+      var sum = 0;
+      Object.keys(SPLIT).forEach(function (m) { var a = r2(Math.max(0, num($("#" + SPLIT[m]).value))); if (a > 0) { payments.push({ method: m, amount: a }); sum = r2(sum + a); } });
+      if (!payments.length) { msg.textContent = "Poné cuánto paga con cada forma de pago."; return; }
+      if (sum !== total) { var dd = r2(total - sum); msg.textContent = "Los pagos suman " + money(sum) + " y la venta es de " + money(total) + ". " + (dd > 0 ? "Faltan " + money(dd) : "Sobran " + money(-dd)) + "."; return; }
+    } else { payments = [{ method: $("#s-method").value, amount: total }]; }
     var sb = $("#s-submit"); sb.disabled = true; setTimeout(function () { sb.disabled = false; }, 1200);
     i.stock = Math.round((i.stock - qty) * 1000) / 1000; i.rolls = (i.rolls || 0) - rolls;
-    var s = { id: uid(), ts: Date.now(), itemId: i.id, name: i.name, unit: "kg", rolls: rolls, qty: qty, price: price, total: r2(qty * price), method: $("#s-method").value, note: $("#s-note").value.trim() };
+    var s = { id: uid(), ts: Date.now(), itemId: i.id, name: i.name, unit: "kg", rolls: rolls, qty: qty, price: price, total: total, method: payments.length > 1 ? "Mixto" : payments[0].method, payments: payments, note: $("#s-note").value.trim() };
     state.sales.push(s); logMove(i, "venta", -qty, s.note, -rolls);
-    $("#day").value = dayKey(Date.now()); $("#s-qty").value = ""; $("#s-rolls").value = ""; $("#s-price").value = ""; $("#s-note").value = ""; renderStock();
+    $("#day").value = dayKey(Date.now()); $("#s-qty").value = ""; $("#s-rolls").value = ""; $("#s-price").value = ""; $("#s-note").value = ""; resetSplit(); renderStock();
     save("Venta guardada: " + money(s.total));
   });
   function renderCaja() {
     if (!$("#day").value) $("#day").value = dayKey(Date.now());
     var day = $("#day").value, list = state.sales.filter(function (s) { return dayKey(s.ts) === day; }).sort(function (a, b) { return b.ts - a.ts; });
     var by = { Efectivo: 0, Transferencia: 0, "Débito": 0, "Crédito": 0 }, total = 0;
-    list.forEach(function (s) { if (s.voided) return; by[s.method] = r2((by[s.method] || 0) + s.total); total = r2(total + s.total); });
+    list.forEach(function (s) { if (s.voided) return; payAmounts(s).forEach(function (p) { by[p.method] = r2((by[p.method] || 0) + p.amount); }); total = r2(total + s.total); });
     var box = $("#stats-caja"); box.textContent = "";
     box.appendChild(h("div", { class: "stat main" }, h("small", { text: "Total del día" }), h("b", { text: money(total) })));
     Object.keys(by).forEach(function (k) { box.appendChild(h("div", { class: "stat" }, h("small", { text: k }), h("b", { text: money(by[k]) }))); });
@@ -493,7 +537,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     if (!list.length) tb.appendChild(h("tr", null, h("td", { colspan: "3", class: "empty", text: "No hay ventas en este día." })));
     list.forEach(function (s) {
       tb.appendChild(h("tr", null,
-        h("td", null, h("div", { class: "t", text: s.name }), h("div", { class: "hint", text: hhmm(s.ts) + " · " + (s.rolls ? s.rolls + (s.rolls === 1 ? " rollo · " : " rollos · ") : "") + fmt(s.qty) + " kg × " + money(s.price) + " · " + s.method + (s.note ? " · " + s.note : "") })),
+        h("td", null, h("div", { class: "t", text: s.name }), h("div", { class: "hint", text: hhmm(s.ts) + " · " + (s.rolls ? s.rolls + (s.rolls === 1 ? " rollo · " : " rollos · ") : "") + fmt(s.qty) + " kg × " + money(s.price) + " · " + payLabel(s) + (s.note ? " · " + s.note : "") })),
         h("td", { class: "num t", text: money(s.total), style: s.voided ? "text-decoration:line-through;color:var(--muted)" : "" }),
         h("td", { class: "actions" }, s.voided ? h("span", { class: "pill", text: "Anulada " + hhmm(s.voided) }) : h("button", { class: "sm ghost danger", text: "Anular", onclick: function (ev) { voidSale(s, ev.currentTarget); } }))));
     });

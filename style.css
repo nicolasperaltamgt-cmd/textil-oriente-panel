@@ -15,6 +15,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+[hidden] { display: none !important; }
 body {
   background:
     radial-gradient(900px 500px at 85% -10%, rgba(143, 171, 232, 0.1), transparent 60%),
@@ -176,6 +177,11 @@ body {
   .methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .methods .stat b { font-size: 21px; }
   .methods .stat.main { grid-column: 1 / -1; }
+  .linkbtn { background: transparent; border: 0; padding: 6px 0; min-height: 40px; color: var(--yellow); text-decoration: underline; text-align: left; font-weight: 600; cursor: pointer; }
+  .linkbtn.sm { min-height: 36px; padding: 4px 10px; margin: 2px 6px 2px 0; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; }
+  .splitbox { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .splitresto { grid-column: 1 / -1; color: var(--muted); font-size: 15px; }
+  .splitresto.okline { color: var(--ok); font-weight: 600; }
   .msg { min-height: 20px; font-size: 15px; color: var(--red); margin: 0; }
   .sale td { padding: 10px; }
   .sale .t { font-weight: 600; }
