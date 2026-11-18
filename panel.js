@@ -44,9 +44,9 @@ const PANEL_HTML = `
       <p class="hint" id="s-ref"></p>
       <div class="row2">
         <label id="s-method-wrap" for="s-method">Forma de pago
-          <select id="s-method"><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option></select>
+          <select id="s-method"><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option><option value="Deuda">Queda debiendo (fiado)</option></select>
         </label>
-        <label for="s-note">Cliente o nota<input id="s-note" type="text" placeholder="Opcional"></label>
+        <label for="s-note">Cliente o nota<input id="s-note" type="text" placeholder="Si queda debiendo, el nombre"></label>
       </div>
       <button type="button" class="linkbtn" id="s-split">Dividir el pago (por ej. efectivo + transferencia)</button>
       <div id="s-split-box" class="splitbox" hidden>
@@ -54,6 +54,7 @@ const PANEL_HTML = `
         <label for="sp-tr">Transferencia<input id="sp-tr" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
         <label for="sp-de">Débito<input id="sp-de" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
         <label for="sp-cr">Crédito<input id="sp-cr" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        <label for="sp-deu">Queda debiendo<input id="sp-deu" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
         <div class="splitresto" id="sp-resto"></div>
       </div>
       <div class="total"><span class="hint">Total</span><b id="s-total">$ 0</b></div>
@@ -64,6 +65,7 @@ const PANEL_HTML = `
     <div class="bar"><label for="day" style="grid-auto-flow:column;align-items:center;gap:10px">Día<input id="day" type="date"></label></div>
     <div class="methods" id="stats-caja"></div>
     <div class="card" id="cierre"><h2 class="title">Cierre de caja</h2><div id="cierre-body" class="stack"></div></div>
+    <div class="card" id="deudores"><h2 class="title" id="deudores-title">Deudores</h2><div id="deudores-body" class="stack"></div></div>
     <div class="tablebox">
       <table style="min-width:0">
         <tbody id="tb-sales" class="sale"></tbody>
@@ -119,6 +121,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   state.sales = (Array.isArray(state.sales) ? state.sales : []).filter(function (s) { return s && typeof s === "object"; });
   state.moves = Array.isArray(state.moves) ? state.moves : [];
   state.expenses = Array.isArray(state.expenses) ? state.expenses : [];
+  state.collections = (Array.isArray(state.collections) ? state.collections : []).filter(function (c) { return c && typeof c === "object" && typeof c.client === "string"; });
   state.cash = state.cash && typeof state.cash === "object" ? state.cash : {};
   var version = initialVersion || 0;
 
@@ -331,17 +334,21 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   function exportXlsx() {
     var wb = XLSX.utils.book_new();
     var stock = state.items.map(function (i) { return { "Tela": i.name, "Rollos": i.rolls || 0, "Kilos totales": i.stock, "Precio de lista": i.price, "Mínimo (kg)": i.min, "Valor a precio de lista": r2(i.stock * i.price) }; });
-    var sales = state.sales.map(function (s) { return { "Fecha": new Date(s.ts).toLocaleDateString("es-AR"), "Hora": hhmm(s.ts), "Tela": s.name, "Rollos": s.rolls || 0, "Kilos": s.qty, "Precio por kilo": s.price, "Total": s.total, "Pago": payLabel(s), "Efectivo": payAmt(s, "Efectivo"), "Transferencia": payAmt(s, "Transferencia"), "Débito": payAmt(s, "Débito"), "Crédito": payAmt(s, "Crédito"), "Nota": s.note, "Estado": s.voided ? "ANULADA" : "Válida" }; });
+    var sales = state.sales.map(function (s) { return { "Fecha": new Date(s.ts).toLocaleDateString("es-AR"), "Hora": hhmm(s.ts), "Tela": s.name, "Rollos": s.rolls || 0, "Kilos": s.qty, "Precio por kilo": s.price, "Total": s.total, "Pago": payLabel(s), "Efectivo": payAmt(s, "Efectivo"), "Transferencia": payAmt(s, "Transferencia"), "Débito": payAmt(s, "Débito"), "Crédito": payAmt(s, "Crédito"), "Queda debiendo": payAmt(s, "Deuda"), "Cliente": s.note, "Nota": s.note, "Estado": s.voided ? "ANULADA" : "Válida" }; });
     var moves = state.moves.map(function (m) { return { "Fecha": new Date(m.ts).toLocaleDateString("es-AR"), "Hora": hhmm(m.ts), "Tela": m.name, "Tipo": m.type, "Rollos": m.rolls || 0, "Kilos": m.qty, "Rollos resultantes": m.rollsAfter != null ? m.rollsAfter : "", "Kilos resultantes": m.stockAfter, "Nota": m.note }; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stock), "Stock");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales.length ? sales : [{ "Fecha": "" }]), "Ventas");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(moves.length ? moves : [{ "Fecha": "" }]), "Movimientos");
     var cierres = [];
-    function crow(d, x, estado) { var b = x.byMethod || {}; return { "Fecha": d, "Estado": estado, "Fondo inicial": x.opening, "Ventas efectivo": b.Efectivo || 0, "Transferencia": b.Transferencia || 0, "Débito": b["Débito"] || 0, "Crédito": b["Crédito"] || 0, "Total vendido": x.total, "Retiros y gastos": x.expenses, "Debía haber": x.expected, "Contado": x.counted, "Diferencia": x.diff, "Hora de cierre": hhmm(x.ts) }; }
+    function crow(d, x, estado) { var b = x.byMethod || {}; return { "Fecha": d, "Estado": estado, "Fondo inicial": x.opening, "Ventas efectivo": b.Efectivo || 0, "Transferencia": b.Transferencia || 0, "Débito": b["Débito"] || 0, "Crédito": b["Crédito"] || 0, "Total cobrado": x.total, "Retiros y gastos": x.expenses, "Debía haber": x.expected, "Contado": x.counted, "Diferencia": x.diff, "Hora de cierre": hhmm(x.ts) }; }
     Object.keys(state.cash).sort().forEach(function (d) { var c = state.cash[d]; (c.history || []).forEach(function (x) { cierres.push(crow(d, x, "Reabierta")); }); if (c.closed) cierres.push(crow(d, c.closed, "Cerrada")); });
     var retiros = state.expenses.map(function (e) { return { "Fecha": e.day, "Hora": hhmm(e.ts), "Monto": e.amount, "Motivo": e.note }; });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cierres.length ? cierres : [{ "Fecha": "" }]), "Cierres de caja");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(retiros.length ? retiros : [{ "Fecha": "" }]), "Retiros y gastos");
+    var deudoresRows = debtors().map(function (e) { return { "Cliente": e.name, "Le vendiste a deber": e.owed, "Pagó": e.paid, "Debe": e.balance }; });
+    var cobrosRows = state.collections.map(function (c) { return { "Fecha": new Date(c.ts).toLocaleDateString("es-AR"), "Hora": hhmm(c.ts), "Cliente": c.client, "Monto": c.amount, "Forma de pago": c.method, "Nota": c.note, "Estado": c.voided ? "ANULADO" : "Válido" }; });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deudoresRows.length ? deudoresRows : [{ "Cliente": "" }]), "Deudores");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cobrosRows.length ? cobrosRows : [{ "Fecha": "" }]), "Cobros de deudas");
     var buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
     saveBlob("textil-oriente-" + dayKey(Date.now()) + ".xlsx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "Excel descargado");
   }
@@ -430,7 +437,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     paintDiff();
     if (locked) {
       var x = c.closed;
-      body.appendChild(h("p", { class: "closedtag", text: "Caja cerrada a las " + hhmm(x.ts) + " · Total vendido: " + money(x.total) + " en " + x.salesCount + (x.salesCount === 1 ? " venta" : " ventas") }));
+      body.appendChild(h("p", { class: "closedtag", text: "Caja cerrada a las " + hhmm(x.ts) + " · Total cobrado: " + money(x.total) + " en " + x.salesCount + (x.salesCount === 1 ? " venta" : " ventas") }));
       var re = h("button", { text: "Reabrir caja" });
       re.addEventListener("click", function () {
         if (!armedReopen) { armedReopen = true; re.textContent = "¿Seguro? Queda registrado"; setTimeout(function () { armedReopen = false; re.textContent = "Reabrir caja"; }, 3500); return; }
@@ -466,11 +473,12 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   }
   function calc() { $("#s-total").textContent = money(r2(num($("#s-qty").value) * num($("#s-price").value))); updateSplitHint(); }
   /* ---------- pago dividido ---------- */
-  var SPLIT = { "Efectivo": "sp-ef", "Transferencia": "sp-tr", "Débito": "sp-de", "Crédito": "sp-cr" };
+  var SPLIT = { "Efectivo": "sp-ef", "Transferencia": "sp-tr", "Débito": "sp-de", "Crédito": "sp-cr", "Deuda": "sp-deu" };
+  var lab = function (m) { return m === "Deuda" ? "Queda debiendo" : m; };
   var splitMode = false;
   function curTotal() { return r2(num($("#s-qty").value) * num($("#s-price").value)); }
   function payAmounts(sl) { return Array.isArray(sl.payments) && sl.payments.length ? sl.payments : [{ method: sl.method, amount: sl.total }]; }
-  function payLabel(sl) { var p = payAmounts(sl); return p.length > 1 ? p.map(function (x) { return x.method + " " + money(x.amount); }).join(" + ") : p[0].method; }
+  function payLabel(sl) { var p = payAmounts(sl); return p.length > 1 ? p.map(function (x) { return lab(x.method) + " " + money(x.amount); }).join(" + ") : lab(p[0].method); }
   function payAmt(sl, m) { var t = 0; payAmounts(sl).forEach(function (x) { if (x.method === m) t = r2(t + x.amount); }); return t; }
   function setSplit(on) {
     splitMode = on;
@@ -488,7 +496,7 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
     el.className = "splitresto";
     el.appendChild(document.createTextNode(d > 0 ? "Falta cobrar " + money(d) + ". " : "Te pasaste por " + money(-d) + ". "));
     if (d > 0) Object.keys(SPLIT).forEach(function (m) {
-      el.appendChild(h("button", { type: "button", class: "sm linkbtn", text: "Poner el resto en " + m.toLowerCase(), onclick: function () { var inp = $("#" + SPLIT[m]); inp.value = String(r2(num(inp.value) + d)); updateSplitHint(); } }));
+      el.appendChild(h("button", { type: "button", class: "sm linkbtn", text: "Poner el resto " + (m === "Deuda" ? "como deuda" : "en " + m.toLowerCase()), onclick: function () { var inp = $("#" + SPLIT[m]); inp.value = String(r2(num(inp.value) + d)); updateSplitHint(); } }));
     });
   }
   $("#s-split").addEventListener("click", function () { setSplit(!splitMode); });
@@ -517,6 +525,8 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
       if (!payments.length) { msg.textContent = "Poné cuánto paga con cada forma de pago."; return; }
       if (sum !== total) { var dd = r2(total - sum); msg.textContent = "Los pagos suman " + money(sum) + " y la venta es de " + money(total) + ". " + (dd > 0 ? "Faltan " + money(dd) : "Sobran " + money(-dd)) + "."; return; }
     } else { payments = [{ method: $("#s-method").value, amount: total }]; }
+    var debt = 0; payments.forEach(function (p) { if (p.method === "Deuda") debt = r2(debt + p.amount); });
+    if (debt > 0 && !$("#s-note").value.trim()) { msg.textContent = "Queda debiendo " + money(debt) + ": poné el nombre del cliente en \"Cliente o nota\"."; return; }
     var sb = $("#s-submit"); sb.disabled = true; setTimeout(function () { sb.disabled = false; }, 1200);
     i.stock = Math.round((i.stock - qty) * 1000) / 1000; i.rolls = (i.rolls || 0) - rolls;
     var s = { id: uid(), ts: Date.now(), itemId: i.id, name: i.name, unit: "kg", rolls: rolls, qty: qty, price: price, total: total, method: payments.length > 1 ? "Mixto" : payments[0].method, payments: payments, note: $("#s-note").value.trim() };
@@ -526,21 +536,91 @@ window.mountPanel = function mountPanel(root, { initialData, initialVersion, onC
   });
   function renderCaja() {
     if (!$("#day").value) $("#day").value = dayKey(Date.now());
-    var day = $("#day").value, list = state.sales.filter(function (s) { return dayKey(s.ts) === day; }).sort(function (a, b) { return b.ts - a.ts; });
-    var by = { Efectivo: 0, Transferencia: 0, "Débito": 0, "Crédito": 0 }, total = 0;
-    list.forEach(function (s) { if (s.voided) return; payAmounts(s).forEach(function (p) { by[p.method] = r2((by[p.method] || 0) + p.amount); }); total = r2(total + s.total); });
+    var day = $("#day").value;
+    var list = state.sales.filter(function (sl) { return dayKey(sl.ts) === day; });
+    var cobros = state.collections.filter(function (c) { return dayKey(c.ts) === day; });
+    var by = { Efectivo: 0, Transferencia: 0, "Débito": 0, "Crédito": 0 }, debtToday = 0;
+    list.forEach(function (sl) { if (sl.voided) return; payAmounts(sl).forEach(function (p) { if (p.method === "Deuda") debtToday = r2(debtToday + p.amount); else by[p.method] = r2((by[p.method] || 0) + p.amount); }); });
+    cobros.forEach(function (c) { if (c.voided) return; by[c.method] = r2((by[c.method] || 0) + c.amount); });
+    var total = 0; Object.keys(by).forEach(function (k) { total = r2(total + by[k]); });
     var box = $("#stats-caja"); box.textContent = "";
-    box.appendChild(h("div", { class: "stat main" }, h("small", { text: "Total del día" }), h("b", { text: money(total) })));
+    box.appendChild(h("div", { class: "stat main" }, h("small", { text: "Cobrado del día" }), h("b", { text: money(total) })));
     Object.keys(by).forEach(function (k) { box.appendChild(h("div", { class: "stat" }, h("small", { text: k }), h("b", { text: money(by[k]) }))); });
+    if (debtToday > 0) box.appendChild(h("div", { class: "stat warn main" }, h("small", { text: "Quedó debiendo hoy" }), h("b", { text: money(debtToday) })));
     renderCierre(day, by);
+    var rows = list.map(function (sl) { return { ts: sl.ts, s: sl }; }).concat(cobros.map(function (c) { return { ts: c.ts, c: c }; })).sort(function (x, y) { return y.ts - x.ts; });
     var tb = $("#tb-sales"); tb.textContent = "";
-    if (!list.length) tb.appendChild(h("tr", null, h("td", { colspan: "3", class: "empty", text: "No hay ventas en este día." })));
-    list.forEach(function (s) {
-      tb.appendChild(h("tr", null,
-        h("td", null, h("div", { class: "t", text: s.name }), h("div", { class: "hint", text: hhmm(s.ts) + " · " + (s.rolls ? s.rolls + (s.rolls === 1 ? " rollo · " : " rollos · ") : "") + fmt(s.qty) + " kg × " + money(s.price) + " · " + payLabel(s) + (s.note ? " · " + s.note : "") })),
-        h("td", { class: "num t", text: money(s.total), style: s.voided ? "text-decoration:line-through;color:var(--muted)" : "" }),
-        h("td", { class: "actions" }, s.voided ? h("span", { class: "pill", text: "Anulada " + hhmm(s.voided) }) : h("button", { class: "sm ghost danger", text: "Anular", onclick: function (ev) { voidSale(s, ev.currentTarget); } }))));
+    if (!rows.length) tb.appendChild(h("tr", null, h("td", { colspan: "3", class: "empty", text: "No hay ventas ni cobros en este día." })));
+    rows.forEach(function (r) {
+      if (r.s) {
+        var sl = r.s;
+        tb.appendChild(h("tr", null,
+          h("td", null, h("div", { class: "t", text: sl.name }), h("div", { class: "hint", text: hhmm(sl.ts) + " · " + (sl.rolls ? sl.rolls + (sl.rolls === 1 ? " rollo · " : " rollos · ") : "") + fmt(sl.qty) + " kg × " + money(sl.price) + " · " + payLabel(sl) + (sl.note ? " · " + sl.note : "") })),
+          h("td", { class: "num t", text: money(sl.total), style: sl.voided ? "text-decoration:line-through;color:var(--muted)" : "" }),
+          h("td", { class: "actions" }, sl.voided ? h("span", { class: "pill", text: "Anulada " + hhmm(sl.voided) }) : h("button", { class: "sm ghost danger", text: "Anular", onclick: function (ev) { voidSale(sl, ev.currentTarget); } }))));
+      } else {
+        var c = r.c;
+        tb.appendChild(h("tr", null,
+          h("td", null, h("div", { class: "t", text: "Cobro de deuda: " + c.client }), h("div", { class: "hint", text: hhmm(c.ts) + " · " + c.method + (c.note ? " · " + c.note : "") })),
+          h("td", { class: "num t", text: money(c.amount), style: c.voided ? "text-decoration:line-through;color:var(--muted)" : "" }),
+          h("td", { class: "actions" }, c.voided ? h("span", { class: "pill", text: "Anulado " + hhmm(c.voided) }) : h("button", { class: "sm ghost danger", text: "Anular", onclick: function (ev) { voidCollection(c, ev.currentTarget); } }))));
+      }
     });
+    renderDeudores();
+  }
+
+  /* ---------- deudores ---------- */
+  function debtors() {
+    var map = {};
+    function entry(name) { var k = norm(name); return map[k] || (map[k] = { key: k, name: name.trim(), owed: 0, paid: 0, sales: [], pays: [] }); }
+    state.sales.forEach(function (sl) { if (sl.voided) return; var d = payAmt(sl, "Deuda"); if (d > 0 && norm(sl.note || "")) { var e = entry(sl.note); e.owed = r2(e.owed + d); e.sales.push({ ts: sl.ts, name: sl.name, amount: d }); } });
+    state.collections.forEach(function (c) { if (c.voided) return; var e = entry(c.client); e.paid = r2(e.paid + c.amount); e.pays.push(c); });
+    return Object.keys(map).map(function (k) { var e = map[k]; e.balance = r2(e.owed - e.paid); return e; }).filter(function (e) { return e.balance !== 0; }).sort(function (x, y) { return y.balance - x.balance; });
+  }
+  var openDebtor = null;
+  function shortDate(ts) { return new Date(ts).toLocaleDateString("es-AR", { day: "numeric", month: "numeric" }); }
+  function renderDeudores() {
+    var body = $("#deudores-body"); if (!body) return; body.textContent = "";
+    var list = debtors(), totalDebt = 0;
+    list.forEach(function (e) { if (e.balance > 0) totalDebt = r2(totalDebt + e.balance); });
+    $("#deudores-title").textContent = "Deudores" + (totalDebt > 0 ? " · te deben " + money(totalDebt) : "");
+    if (!list.length) { body.appendChild(h("p", { class: "hint", text: "Nadie debe plata. Cuando una venta quede debiendo, el cliente aparece acá." })); return; }
+    list.forEach(function (e) {
+      var isOpen = openDebtor === e.key;
+      var head = h("div", { class: "debhead" },
+        h("div", null, h("b", { text: e.name }), h("div", { class: "hint", text: e.balance > 0 ? "Le vendiste a deber " + money(e.owed) + " · pagó " + money(e.paid) : "Pagó de más: saldo a favor" })),
+        h("div", { class: "debowed", text: e.balance > 0 ? money(e.balance) : "a favor " + money(-e.balance) }));
+      var wrap = h("div", { class: "deb" }, head);
+      if (e.balance > 0) {
+        wrap.appendChild(h("button", { class: "sm", text: isOpen ? "Cancelar" : "Registrar pago", onclick: function () { openDebtor = isOpen ? null : e.key; renderDeudores(); } }));
+      }
+      if (isOpen && e.balance > 0) {
+        var amt = h("input", { id: "d-amt", type: "number", min: "0", step: "any", inputmode: "decimal", value: String(e.balance) });
+        var met = h("select", { id: "d-met" }, h("option", { text: "Efectivo" }), h("option", { text: "Transferencia" }), h("option", { text: "Débito" }), h("option", { text: "Crédito" }));
+        var note = h("input", { id: "d-note", type: "text", placeholder: "Nota (opcional)" });
+        wrap.appendChild(h("div", { class: "debform" }, h("label", { for: "d-amt" }, "Cuánto paga", amt), h("label", { for: "d-met" }, "Forma de pago", met), h("label", { for: "d-note" }, "Nota", note)));
+        wrap.appendChild(h("button", { class: "primary", text: "Cobrar y sumar a la caja de hoy", onclick: function () {
+          var a = r2(num(amt.value));
+          if (a <= 0) { toast("Poné cuánto pagó"); return; }
+          if (a > e.balance) { toast("Debe " + money(e.balance) + ": no podés cobrar más que eso."); return; }
+          if (cashOf(dayKey(Date.now())).closed) { toast("La caja de hoy está cerrada. Reabrila para registrar el cobro."); return; }
+          state.collections.push({ id: uid(), ts: Date.now(), client: e.name, amount: a, method: met.value, note: note.value.trim() });
+          openDebtor = null; $("#day").value = dayKey(Date.now()); renderCaja();
+          save("Cobro registrado: " + money(a) + " de " + e.name);
+        } }));
+      }
+      var det = h("div", { class: "debdetail" });
+      e.sales.forEach(function (x) { det.appendChild(h("div", { text: shortDate(x.ts) + " · " + x.name + " · quedó debiendo " + money(x.amount) })); });
+      e.pays.forEach(function (c) { det.appendChild(h("div", { text: shortDate(c.ts) + " · pagó " + money(c.amount) + " (" + c.method + ")" })); });
+      wrap.appendChild(det);
+      body.appendChild(wrap);
+    });
+  }
+  var armedCob = null;
+  function voidCollection(c, btn) {
+    if (cashOf(dayKey(c.ts)).closed) { toast("La caja de ese día está cerrada. Reabrila para anular."); return; }
+    if (armedCob !== btn) { armedCob = btn; btn.textContent = "¿Seguro?"; setTimeout(function () { if (armedCob === btn) { btn.textContent = "Anular"; armedCob = null; } }, 3000); return; }
+    c.voided = Date.now(); armedCob = null; renderCaja(); save("Cobro anulado: la deuda vuelve");
   }
   var armedSale = null;
   function voidSale(s, btn) {

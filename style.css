@@ -177,6 +177,13 @@ body {
   .methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .methods .stat b { font-size: 21px; }
   .methods .stat.main { grid-column: 1 / -1; }
+  .deb { display: grid; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); justify-items: start; }
+  .deb:last-child { border-bottom: 0; }
+  .debhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; width: 100%; }
+  .debowed { font: 500 22px var(--font-family-display); color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .debform { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  .debform label:last-child { grid-column: 1 / -1; }
+  .debdetail { color: var(--muted); font-size: 14px; display: grid; gap: 2px; }
   .linkbtn { background: transparent; border: 0; padding: 6px 0; min-height: 40px; color: var(--yellow); text-decoration: underline; text-align: left; font-weight: 600; cursor: pointer; }
   .linkbtn.sm { min-height: 36px; padding: 4px 10px; margin: 2px 6px 2px 0; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; }
   .splitbox { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
