@@ -145,14 +145,16 @@ body {
   button.sm { padding: 8px 12px; min-height: 42px; font-size: 15px; }
 
   .tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
-  table { border-collapse: collapse; width: 100%; min-width: 820px; }
+  table { border-collapse: collapse; width: 100%; min-width: 860px; }
   th { text-align: left; font: 500 12px var(--font-family-display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #tb-stock td:first-child { min-width: 210px; }
+  th.num { white-space: normal; line-height: 1.25; }
   td input { width: 100%; background: transparent; border-color: transparent; padding: 8px 8px; }
   td input:hover, td input:focus { border-color: var(--line); background: var(--surface-2); }
-  td input.n { text-align: right; font-variant-numeric: tabular-nums; width: 120px; }
+  td input.n { text-align: right; font-variant-numeric: tabular-nums; width: 100px; }
   td select { background: transparent; border-color: transparent; padding: 8px 2px; min-height: 44px; }
   td.actions { white-space: nowrap; text-align: right; }
   tr.low td.stockcell input { color: var(--yellow); font-weight: 700; }
